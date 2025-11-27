@@ -55,104 +55,88 @@ class mrz_reader:
         else:
             print("Firstly, You must compile models")
 
-def pass_md(input_string):
-    # Define regular expressions for each piece of information
-    country_match = re.search(r'PA(\w{3})', input_string)
-    seria_numar_match = re.findall(r'<<<<<<<<<<<<<<<<<<<<<<<<<(.*?)MDA', input_string)
-    sex_match = re.search(r'([MF])\d+<', input_string)
-    expiry_date_match = re.findall(r'[MF](\d{6})', input_string)
-    cnp_match = re.search(r'(\d{13})<', input_string)
 
-    # Extract information using regular expressions
-    country = country_match.group(1) if country_match else None
-    index_rou = input_string.find(country) if country else None
-    index_less_than = input_string.find("<", index_rou + 3) if index_rou else None
-    name = input_string[index_rou + 3 : index_less_than] if index_rou and index_less_than else None
+def parse_mrz_romania(mrz):
+    # Golește caractere inutile
+    mrz = mrz.replace("\n", "").replace(" ", "")
+    
+    data = {
+        "tara": None,
+        "nume": None,
+        "prenume": None,
+        "sex": None,
+        "cnp": None,
+        "data_nasterii": None,
+        "data_expirarii": None,
+        "serie_document": None,
+        "numar_document": None
+    }
+    ### -------------------------------
+    ### LINIA 1 MRZ (nume, prenume)
+    ### -------------------------------
+    data_nasterii_match = re.search(r'ROU(\d{6})', mrz)
+    sex_match = re.search(r'([MF])\d{13}', mrz)
+    
+    # Extrage numele de familie din între IDROU și primele 
+    surname_match = re.search(r'IDROU([A-Z]+)<', mrz)
+    if surname_match:
+        data["nume"] = surname_match.group(1)
+ 
+    # Extrage prenumele după primele 
+    name_match = re.findall(r'<<([A-Z<]+)<<', mrz)
+    if name_match:
+        prenume = name_match[0].replace("<", " ").strip()
+        data["prenume"] = prenume
+    
+    doc_match = re.search(r'([A-Z]{2})(\d{6})', mrz)
+    if doc_match:
+        data["serie_document"] = doc_match.group(1)
+        data["numar_document"] = doc_match.group(2)
+    
+    ### -------------------------------
+    ### CNP — 13 cifre consecutive
+    ### -------------------------------
+    # CNP apare după codul țării ROU și după datele despre gen/dată
     sex = sex_match.group(1) if sex_match else None
-    cnp = cnp_match.group(1) if cnp_match else None
-
-    # Define a function to convert sex code to a more readable format
-    def convert_sex(sex_code):
-        if sex_code == 'M':
-            return 'Masculin'
-        elif sex_code == 'F':
-            return 'Feminin'
-        else:
-            return None
-
-    sex = convert_sex(sex) if sex else None
-    expiry_date = expiry_date_match[0] if expiry_date_match else None
-
-    # Return the extracted information as a dictionary
-    return {
-        "Country": country,
-        "Name": name,
-        "Series": seria_numar_match[0] if seria_numar_match else None,
-        "Sex": sex,
-        "Expiry Date": expiry_date,
-        "CNP": cnp,
-    }
-
-    return extracted_info
-
-def id_card_rou(input_string):
-    # Define regular expressions for each piece of information
-    country_match = re.search(r'ID(\w{3})', input_string)
-    name_match = re.findall(r'<<<(.*?)<', input_string)
-    sex_match = re.search(r'([MF])\d{13}', input_string)
-    expiry_date_match = re.search(r'[MF](\d{6})', input_string)
-    data_nasterii_match = re.search(r'ROU(\d{6})', input_string)
-
-    # Extract information using regular expressions
-    country = country_match.group(1)
-    index_rou = input_string.find(country)
-    index_less_than = input_string.find("<", index_rou + 3)
-    name = input_string[index_rou + 3: index_less_than]
-
-    sex = sex_match.group(1)
-
-    data_nasterii = data_nasterii_match.group(1)
-       
-    year = int(data_nasterii[:2])
-    month = data_nasterii[2:4]
-    day = data_nasterii[4:]
-
-    # Determine the full year based on the first two digits
-    if year >= 0 and year <= 99:
-        if sex == 'M':  # Assuming 'M' for males born in 1900-1999
-            year += 1900
-        else:           # Assuming 'F' for females born in 2000-2099
-            year += 2000
-
-    formatted_date = f"{year:04d}-{month}-{day}"
-    sex_cnp = input_string[-8:-7]
-    last_seven_digits_except_last = input_string[-7:-1]
-    cnp = sex_cnp + data_nasterii + last_seven_digits_except_last
-
-    # Map sex to human-readable values
-    if sex == 'M':
-        sex = 'male'
-    elif sex == 'F':
-        sex = 'female'
-
-    # Extract the series number
-    #seria_numar = re.findall(r'(\d{9})', input_string)
-    #series_number = seria_numar[0] if seria_numar else None
-
-    # Extract the expiry date
-    expiry_date = expiry_date_match.group(1)
-    if country == 'ROU':
-    	country = 'Romanian'
-
-    return {
-        "Country": country,
-        "Name": name,
-        "Series_number": name_match[0],
-        "Sex": sex,
-        "Expiry Date": expiry_date,
-        "CNP": cnp,
-        "Data nasterii": formatted_date
-    }
+    data_nasterii = data_nasterii_match.group(1) if data_nasterii_match else None
+    
+    if data_nasterii:
+        year = int(data_nasterii[:2])
+        month = data_nasterii[2:4]
+        day = data_nasterii[4:]
+        if year >= 0 and year <= 99:
+            if sex == 'M':  
+                year += 1900
+            else:           
+                year += 2000
+        formatted_date = f"{year:04d}-{month}-{day}"
+        data["data_nasterii"] = formatted_date
+    
+    if sex:
+        sex_cnp = mrz[-8:-7]
+        last_seven_digits_except_last = mrz[-7:-1]
+        cnp = sex_cnp + data_nasterii + last_seven_digits_except_last
+        data['cnp'] = cnp
+        
+        # Map sex to human-readable values
+        if sex == 'M':
+            data["sex"] = 'Masculin'
+        elif sex == 'F':
+            data["sex"] = 'Feminin'
+    
+    ### -------------------------------
+    ### Data expirării — format YYMMDD
+    ### -------------------------------
+    exp = re.search(r'[MF](\d{6})', mrz)
+    if exp:
+        yy = int(exp.group(1)[0:2])
+        mm = exp.group(1)[2:4]
+        dd = exp.group(1)[4:6]
+        year = 2000 + yy
+        data["data_expirarii"] = f"{year}-{mm}-{dd}"
+    
+    data["tara"] = "România"
+    return data
 
 def process_image(file_path):
     image = cv2.imread(file_path)
@@ -226,12 +210,3 @@ mrz_reader_instance.clear_background = True
 
 
 mrz_reader_instance.load()
-'''mrz_dl, face = mrz_reader_instance.predict("C:\BEIA\pass_md.jpg")
-
-print("MRZ Result:", mrz_dl)
-
-result = pass_md(mrz_dl)
-
-for key, value in result.items():
-    if value:
-        print(f"{key}: {value}")'''
